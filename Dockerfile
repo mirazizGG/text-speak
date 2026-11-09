@@ -12,6 +12,7 @@ RUN groupadd --gid 10001 tts \
     && mkdir -p /data/voices /data/jobs /data/tmp /data/huggingface /srv/text-speak \
     && chown -R 10001:10001 /data /srv/text-speak
 COPY api.py engine.py jobs.py job_service.py inference_pool.py trt_backend.py flashinfer_backend.py ./
+COPY model_assets.py model_assets.json ./
 COPY static ./static
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/srv/text-speak HOME=/data TMPDIR=/data/tmp \
     HF_HOME=/data/huggingface TTS_VOICES_DIR=/data/voices TTS_JOBS_DIR=/data/jobs \

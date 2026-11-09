@@ -93,6 +93,7 @@ class OmniVoiceEngine:
         tensorrt_plan: str | Path | None = None,
         tensorrt_manifest: str | Path | None = None,
         profile_writer: bool = True,
+        auto_download_models: bool = True,
     ):
         if not model_id or not model_revision:
             raise ValueError("An explicit model ID and revision are required.")
@@ -102,6 +103,8 @@ class OmniVoiceEngine:
             raise ValueError("acceleration must be none, flashinfer or tensorrt.")
         if not isinstance(flashinfer_graphs, bool):
             raise ValueError("flashinfer_graphs must be a boolean.")
+        if not isinstance(auto_download_models, bool):
+            raise ValueError("auto_download_models must be a boolean.")
         if acceleration == "tensorrt" and (not tensorrt_plan or not tensorrt_manifest):
             raise ValueError("TensorRT requires a pinned plan and manifest.")
         self.model_id = model_id
@@ -121,6 +124,15 @@ class OmniVoiceEngine:
         self._pinned_prompts = OrderedDict()
         self.model_path = Path(model_path) if model_path else None
         self.asr_model_path = Path(asr_model_path).resolve() if asr_model_path else None
+        self.auto_download_models = auto_download_models
+        if auto_download_models:
+            from model_assets import MODELS
+
+            pinned = MODELS["omnivoice"]
+            if self.model_path is None and (model_id, model_revision) == (pinned["repo_id"], pinned["revision"]):
+                self.model_path = self.cache_dir / "models" / "omnivoice"
+            if self.asr_model_path is None:
+                self.asr_model_path = self.cache_dir / "models" / "whisper"
         self.sample_rate = 0
         self.languages: list[dict[str, str]] = []
         self.voices = [
@@ -157,6 +169,13 @@ class OmniVoiceEngine:
 
             if self.device.startswith("cuda") and not torch.cuda.is_available():
                 raise RuntimeError("The configured CUDA device is unavailable.")
+            if self.auto_download_models:
+                from model_assets import MODELS, ensure_snapshot
+
+                pinned = MODELS["omnivoice"]
+                if (self.model_id, self.model_revision) == (pinned["repo_id"], pinned["revision"]):
+                    self.model_path = ensure_snapshot("omnivoice", self.model_path)
+                self.asr_model_path = ensure_snapshot("whisper", self.asr_model_path)
             if not isinstance(LANG_NAMES, set) or not isinstance(LANG_IDS, set):
                 raise RuntimeError("Unsupported upstream language registry format.")
             if set(LANG_NAME_TO_ID) != LANG_NAMES or set(LANG_NAME_TO_ID.values()) != LANG_IDS:
@@ -180,10 +199,13 @@ class OmniVoiceEngine:
                 if any(not (self.model_path / name).is_file() for name in required):
                     raise RuntimeError("The offline model snapshot is incomplete.")
             else:
+                from model_assets import offline_mode
+
                 checkpoint = snapshot_download(
                     repo_id=self.model_id,
                     revision=self.model_revision,
                     cache_dir=str(self.cache_dir),
+                    local_files_only=not self.auto_download_models or offline_mode(),
                 )
             self._model = OmniVoice.from_pretrained(
                 checkpoint,

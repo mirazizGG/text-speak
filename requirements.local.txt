@@ -1,0 +1,27 @@
+# Python 3.11. Install matching Torch/TorchAudio from the CPU or cu128 index first.
+# Public baseline; no private Docker image, wheelhouse, FlashInfer or TensorRT.
+torch==2.10.0
+torchaudio==2.10.0
+omnivoice @ git+https://github.com/k2-fsa/OmniVoice.git@08be0b4ccbac3e13e374e86fbfead4b4cac343e2
+transformers==5.14.1
+fastapi==0.141.1
+uvicorn==0.52.1
+pydantic==2.13.4
+starlette==1.6.0
+anyio==4.14.2
+typing-inspection==0.4.3
+huggingface-hub==1.24.0
+filelock==4.2.4
+numpy==2.0.2
+scipy==1.17.1
+accelerate==1.15.0
+librosa==0.11.0
+soundfile==0.14.0
+imageio-ffmpeg==0.8.1
+pydub==0.25.1
+gradio==6.31.0
+tensorboardX==2.6.5
+webdataset==1.0.2
+num2words==0.5.14
+python-multipart==0.0.33
+python-dotenv==1.2.1

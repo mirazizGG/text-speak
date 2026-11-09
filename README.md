@@ -5,6 +5,70 @@ audio namunadan bir martalik klonlash, ovoz profilini saqlash, audioni matnga
 o'girish, ko'p matnni navbatga qo'yish va batch'dan ZIP audio olish.
 API tarjima yoki chat javoblarini yaratmaydi.
 
+## GitHub'dan yuklab ishga tushirish
+
+Python 3.11, Git va internet kerak. Tavsiya etilgan muhit: Linux yoki Windows'da
+WSL2. Quyidagi yo'l public PyTorch backendidan foydalanadi; repodagi asosiy
+`Dockerfile`/`compose.yaml` esa oldindan tayyorlangan server image'i, offline
+paketlar va TensorRT volume'iga mo'ljallangan.
+
+```bash
+git clone https://github.com/mirazizGG/text-speak.git
+cd text-speak
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+# NVIDIA GPU uchun (mos drayver talab qilinadi):
+python -m pip install torch==2.10.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install -r requirements.local.txt
+cp .env.example .env
+```
+
+CPU ishlatish uchun Torch o'rnatish qatorida indeksni
+`https://download.pytorch.org/whl/cpu` ga almashtiring va `.env` ichida
+`TTS_DEVICE=cpu` yozing. CPU tezligi bu o'zgarishda sinovdan o'tkazilmagan.
+NVIDIA rejimida asosiy modeldan tashqari alohida speech worker ham xotira oladi;
+startup GPU/RAM zaxirasini tekshiradi. 8 GB GPU yetishi kafolatlanmaydi.
+
+`.env` dagi `TTS_API_KEY` o'rniga o'zingizning kamida 32 belgili tasodifiy kalitingizni
+yozing; yangi kalitni `python -c "import secrets; print(secrets.token_hex(32))"`
+bilan yarating. `.env` shaxsiy bo'lib qoladi. Tayyor bo'lgach loyiha papkasidan:
+
+```bash
+python -m uvicorn api:create_app --factory --env-file .env --host 127.0.0.1 --port 8070 --workers 1
+```
+
+**Dastur modelni o'zi tayyorlaydi.** Ishga tushishda mahalliy model fayllari
+tekshiriladi; yetishmagan yoki kesilgan fayllar rasmiy Hugging Face manbasidan
+yuklanadi. Yangi yuklamaning SHA256 xeshi tekshiriladi, so'ng tayyor fayl o'rniga
+qo'yiladi. Keyingi ishga tushishda mavjud katta vaznlar hajmi, kichik
+metadata/tokenizer fayllari esa xeshi bilan tekshiriladi; to'liq nusxa uchun
+tarmoq yoki qayta yuklash kerak emas. Jarayon/progress terminalda ko'rinadi.
+
+| Vazifa | Model va aniq versiya | Mahalliy papka | Hajm |
+|---|---|---|---|
+| Matndan ovoz, audio tokenizer bilan | [k2-fsa/OmniVoice](https://huggingface.co/k2-fsa/OmniVoice/tree/c5fdb5ccb189668d56333f77ba2629f4cd7535f4), `c5fdb5ccb189668d56333f77ba2629f4cd7535f4` | `offline/model` | taxminan 3.27 GB |
+| Transkripsiya va klonlash uchun avtomatik matn | [openai/whisper-large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo/tree/41f01f3fe87f28c78e2fbf8b568835947dd65ed9), `41f01f3fe87f28c78e2fbf8b568835947dd65ed9` | `offline/whisper` | taxminan 1.62 GB |
+
+Birinchi ishga tushish taxminan 4.9 GB model yuklaydi va tayyor preset ovozlarini
+yaratadi; paketlar/keshlar/natijalar uchun qo'shimcha disk va RAM kerak.
+Yuklama uzilsa dastur xatoni ko'rsatadi; internet/joy muammosini tuzatib qayta
+ishga tushiring. To'liq fayllar saqlanadi, tugallanmagan fayl tayyor model sifatida
+ishlatilmaydi. Model papkasi yozishga ruxsatli bo'lishi kerak.
+
+`http://127.0.0.1:8070/readyz` 200 qaytargach,
+`http://127.0.0.1:8070/docs` ni oching va **Authorize** orqali o'z API kalitingizni
+kiriting. Model yuklanayotganida/generatsiya boshlanguncha tayyorlik 503 bo'lishi mumkin.
+
+Internetli avtomatik tayyorlashni o'chirish yoki o'zingiz tayyorlagan boshqa
+mahalliy ASR snapshotidan foydalanish uchun `TTS_AUTO_DOWNLOAD_MODELS=0`.
+`HF_HUB_OFFLINE=1` yoki `TRANSFORMERS_OFFLINE=1` ham tarmoqqa chiqishni taqiqlaydi;
+bu rejimda modellarni oldindan tayyorlash kerak. Server Docker image'ida offline
+rejim allaqachon yoqilgan. TensorRT/FlashInfer tezlashtirishlari alohida, mos
+GPU/runtime talab qiladi va boshqa kompyuterga tayyor plan ko'chirish shart emas.
+Model litsenziyalari: [OmniVoice model kartasi](https://huggingface.co/k2-fsa/OmniVoice)
+va [Whisper model kartasi](https://huggingface.co/openai/whisper-large-v3-turbo).
+
 Ovoz sifati uchun standart generatsiya 32 qadamda qoladi. Speech ishchilari
 FlashInfer'ning asl CUDA graph yo'lidan foydalanishi mumkin: shakl bir xil bo'lsa
 graf qayta ishlatiladi, xotira yoki shakl mos kelmasa odatiy FlashInfer ishlaydi.

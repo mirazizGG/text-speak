@@ -404,6 +404,9 @@ def create_app(settings: Settings | None = None, engine=None):
         graph_setting = os.environ.get("TTS_FLASHINFER_GRAPHS", "0")
         if graph_setting not in {"0", "1"}:
             raise ValueError("TTS_FLASHINFER_GRAPHS must be 0 or 1")
+        download_setting = os.environ.get("TTS_AUTO_DOWNLOAD_MODELS", "1")
+        if download_setting not in {"0", "1"}:
+            raise ValueError("TTS_AUTO_DOWNLOAD_MODELS must be 0 or 1")
         engine_config = dict(
             model_id=os.environ.get("TTS_MODEL_ID", "k2-fsa/OmniVoice"),
             model_revision=os.environ.get("TTS_MODEL_REVISION", "c5fdb5ccb189668d56333f77ba2629f4cd7535f4"),
@@ -417,6 +420,7 @@ def create_app(settings: Settings | None = None, engine=None):
             flashinfer_graphs=graph_setting == "1",
             tensorrt_plan=os.environ.get("TTS_TENSORRT_PLAN"),
             tensorrt_manifest=os.environ.get("TTS_TENSORRT_MANIFEST"),
+            auto_download_models=download_setting == "1",
         )
         # Profile creation/transcription stays on its validated parent backend;
         # private speech processes own the optional TensorRT execution contexts.
@@ -424,6 +428,10 @@ def create_app(settings: Settings | None = None, engine=None):
         if engine_config["acceleration"] == "tensorrt":
             admin_config["acceleration"] = "flashinfer"
         engine = OmniVoiceEngine(**admin_config)
+        # The owner provisions models first; child processes only open those
+        # same local files and never start their own large downloads.
+        engine_config.update(model_path=engine.model_path, asr_model_path=engine.asr_model_path,
+                             auto_download_models=False)
     from inference_pool import LocalSpeechBackend, ProcessSpeechBackend
 
     temporary_jobs = tempfile.TemporaryDirectory(prefix="text-speak-jobs-") if injected_engine and settings.jobs_dir is None else None

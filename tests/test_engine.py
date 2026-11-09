@@ -268,7 +268,7 @@ def runtime(tmp_path, monkeypatch):
     asr.mkdir()
     for name in ("config.json", "model.safetensors", "preprocessor_config.json", "tokenizer.json"):
         (asr / name).write_text("fake local snapshot")
-    settings = dict(model_id="k2-fsa/OmniVoice", model_revision="pinned-revision", cache_dir=tmp_path / "cache", voices_dir=tmp_path / "voices", device="cpu", asr_model_path=asr)
+    settings = dict(model_id="k2-fsa/OmniVoice", model_revision="pinned-revision", cache_dir=tmp_path / "cache", voices_dir=tmp_path / "voices", device="cpu", asr_model_path=asr, auto_download_models=False)
     engine = OmniVoiceEngine(**settings)
     engine.load()
     return types.SimpleNamespace(engine=engine, model=models[-1], models=models, sf=sf, prompts=prompts, settings=settings, seeds=seeds, tmp=tmp_path, normalizer=normalizer, upstream=upstream)
@@ -277,6 +277,94 @@ def runtime(tmp_path, monkeypatch):
 def test_import_has_no_ml_dependencies():
     result = subprocess.run([sys.executable, "-c", "import sys,engine; assert not {'torch','omnivoice','numpy','soundfile'} & set(sys.modules)"], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_startup_prepares_pinned_models_before_inference(runtime, monkeypatch):
+    import model_assets
+
+    calls = []
+
+    def prepare(name, destination):
+        directory = Path(destination)
+        required = ("config.json", "model.safetensors", "tokenizer.json", "audio_tokenizer/config.json") if name == "omnivoice" else (
+            "config.json", "model.safetensors", "preprocessor_config.json", "tokenizer.json")
+        for filename in required:
+            target = directory / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("prepared test snapshot")
+        calls.append((name, directory))
+        return directory
+
+    monkeypatch.setattr(model_assets, "ensure_snapshot", prepare)
+    model = OmniVoiceEngine(**{**runtime.settings, "model_revision": model_assets.MODELS["omnivoice"]["revision"],
+        "asr_model_path": None, "voices_dir": runtime.tmp / "auto-voices", "auto_download_models": True})
+    model.load()
+    assert [name for name, _ in calls] == ["omnivoice", "whisper"]
+    assert model.model_path == runtime.tmp / "cache/models/omnivoice"
+    assert model.asr_model_path == runtime.tmp / "cache/models/whisper"
+    assert model._ready and model._asr_available()
+
+
+def test_download_optout_preserves_transcription_free_startup(runtime, monkeypatch):
+    import model_assets
+
+    monkeypatch.setattr(model_assets, "ensure_snapshot", lambda *a, **k: pytest.fail("download attempted"))
+    model = OmniVoiceEngine(**{**runtime.settings, "asr_model_path": None})
+    model.load()
+    assert model._ready and not model._asr_available()
+
+
+def test_custom_model_snapshot_is_not_repaired_as_the_default_checkpoint(runtime, monkeypatch):
+    import model_assets
+
+    directory = runtime.tmp / "custom-model"
+    for filename in ("config.json", "model.safetensors", "tokenizer.json", "audio_tokenizer/config.json"):
+        target = directory / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("custom snapshot")
+    def prepare(name, destination):
+        assert name == "whisper", "custom TTS snapshot must not be replaced"
+        return Path(destination)
+
+    monkeypatch.setattr(model_assets, "ensure_snapshot", prepare)
+    model = OmniVoiceEngine(**{**runtime.settings, "model_path": directory, "auto_download_models": True})
+    model.load()
+    assert model._ready and (directory / "config.json").read_text() == "custom snapshot"
+
+
+def test_explicit_whisper_path_still_runs_manifest_completeness_checks(runtime, monkeypatch):
+    import model_assets
+
+    # All four old capability-check sentinel files exist, but that must not
+    # bypass detection/repair of truncated weights or absent tokenizer files.
+    calls = []
+
+    def prepare(name, destination):
+        calls.append(name)
+        return Path(destination)
+
+    monkeypatch.setattr(model_assets, "ensure_snapshot", prepare)
+    model = OmniVoiceEngine(**{**runtime.settings, "auto_download_models": True})
+    model.load()
+    assert calls == ["whisper"]
+    assert model._ready
+
+
+def test_custom_hub_model_honors_transformers_offline_flag(runtime, monkeypatch):
+    import model_assets
+
+    calls = []
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+    monkeypatch.setattr(model_assets, "ensure_snapshot", lambda name, destination: Path(destination))
+
+    def snapshot(**options):
+        calls.append(options)
+        return "/fake/pinned-snapshot"
+
+    monkeypatch.setattr(sys.modules["huggingface_hub"], "snapshot_download", snapshot)
+    model = OmniVoiceEngine(**{**runtime.settings, "auto_download_models": True})
+    model.load()
+    assert calls[0]["local_files_only"] is True
 
 
 def accelerated_engine(runtime, monkeypatch, apply):

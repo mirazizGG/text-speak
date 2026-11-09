@@ -1,6 +1,8 @@
 *
 !api.py
 !engine.py
+!model_assets.py
+!model_assets.json
 !jobs.py
 !job_service.py
 !inference_pool.py

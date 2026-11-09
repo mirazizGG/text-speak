@@ -6,6 +6,7 @@ api-handoff.zip
 Text-Speak.postman_collection.json
 Text-Speak-API.txt
 .venv/
+data/
 __pycache__/
 .pytest_cache/
 *.pyc

@@ -16,6 +16,8 @@ def test_worker_graphs_are_opt_in_and_parent_model_always_stays_eager(tmp_path, 
     def factory(**options):
         engine = FakeEngine()
         engine.options = options
+        engine.model_path = tmp_path / "resolved-tts"
+        engine.asr_model_path = tmp_path / "resolved-asr"
         constructed.append(engine)
         return engine
 
@@ -28,6 +30,9 @@ def test_worker_graphs_are_opt_in_and_parent_model_always_stays_eager(tmp_path, 
             assert constructed[-1].options["flashinfer_graphs"] is False
             assert app.state.worker.backend.config["flashinfer_graphs"] is (enabled == "1")
             assert app.state.worker.backend.config["num_steps"] == 32
+            assert app.state.worker.backend.config["auto_download_models"] is False
+            assert app.state.worker.backend.config["model_path"] == constructed[-1].model_path
+            assert app.state.worker.backend.config["asr_model_path"] == constructed[-1].asr_model_path
         finally:
             app.state.jobs.close()
             app.state.admin_worker.executor.shutdown()
@@ -37,6 +42,12 @@ def test_worker_graphs_are_opt_in_and_parent_model_always_stays_eager(tmp_path, 
 def test_invalid_graph_flag_fails_before_loading_or_starting_workers(tmp_path, monkeypatch):
     monkeypatch.setenv("TTS_FLASHINFER_GRAPHS", "sometimes")
     with pytest.raises(ValueError, match="TTS_FLASHINFER_GRAPHS"):
+        create_app(Settings(api_key=API_KEY, jobs_dir=tmp_path))
+
+
+def test_invalid_download_flag_fails_before_loading_or_starting_workers(tmp_path, monkeypatch):
+    monkeypatch.setenv("TTS_AUTO_DOWNLOAD_MODELS", "sometimes")
+    with pytest.raises(ValueError, match="TTS_AUTO_DOWNLOAD_MODELS"):
         create_app(Settings(api_key=API_KEY, jobs_dir=tmp_path))
 
 
