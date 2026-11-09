@@ -1,0 +1,15 @@
+*
+!api.py
+!engine.py
+!jobs.py
+!job_service.py
+!inference_pool.py
+!trt_backend.py
+!flashinfer_backend.py
+!requirements.txt
+!requirements.lock
+!static/
+!static/**
+!offline/
+!offline/wheels/
+!offline/wheels/**

@@ -1,0 +1,69 @@
+name: text-speak
+services:
+  api:
+    image: text-speak:quality-speed-20261107-093515
+    pull_policy: never
+    container_name: text-speak
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${TTS_BIND_IP:-10.2.1.150}:${TTS_PORT:-8070}:8070"
+    env_file: .env
+    environment:
+      TTS_MODEL_PATH: /models/omnivoice
+      TTS_ASR_MODEL_PATH: /models/whisper
+      TTS_DEVICE: cuda:0
+      TTS_JOBS_DIR: /data/jobs
+      TTS_PARALLEL_WORKERS: ${TTS_PARALLEL_WORKERS:-2}
+      TTS_MAX_TEXT_CHARS: ${TTS_MAX_TEXT_CHARS:-0}
+      TTS_MAX_BODY_BYTES: ${TTS_MAX_BODY_BYTES:-0}
+      TTS_MAX_AUDIO_BYTES: ${TTS_MAX_AUDIO_BYTES:-0}
+      TTS_QUEUE_SIZE: ${TTS_QUEUE_SIZE:-0}
+      TTS_REQUEST_TIMEOUT: ${TTS_REQUEST_TIMEOUT:-0}
+      TTS_JOB_RETENTION_SECONDS: ${TTS_JOB_RETENTION_SECONDS:-0}
+      TTS_ACCELERATION: ${TTS_ACCELERATION:-flashinfer}
+      TTS_FLASHINFER_GRAPHS: ${TTS_FLASHINFER_GRAPHS:-1}
+      TTS_TENSORRT_PLAN: /models/tensorrt/forward.plan
+      TTS_TENSORRT_MANIFEST: /models/tensorrt/manifest.json
+      FLASHINFER_CUDA_ARCH_LIST: ${TTS_FLASHINFER_CUDA_ARCH_LIST:-12.0a}
+      FLASHINFER_USE_CUDA_NORM: "1"
+      CUDA_VISIBLE_DEVICES: "0"
+    volumes:
+      - ./offline/model:/models/omnivoice:ro
+      - ./offline/whisper:/models/whisper:ro
+      - trt-artifacts:/models/tensorrt:ro
+      - tts-data:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${TTS_GPU_ID:-0}"]
+              capabilities: [gpu]
+        limits:
+          cpus: "8"
+          memory: 16G
+    shm_size: 1gb
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  tts-data:
+    name: text-speak-data
+  trt-artifacts:
+    external: true
+    name: text-speak-tensorrt
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 192.168.226.0/24
+          gateway: 192.168.226.1

@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+API-ACCESS.env
+api-handoff.zip
+Text-Speak.postman_collection.json
+Text-Speak-API.txt
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+offline/
+verification/
+*.tar
+*.tar.gz
